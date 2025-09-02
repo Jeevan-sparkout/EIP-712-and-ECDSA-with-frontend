@@ -1,0 +1,12 @@
+EIP_712-and ECDSA with Frontend
+
+First deploy erc20 Mytoken with permit function
+and Deploy permit.js it will log all the required details which can be used in permit function in smart contract
+Can use frontend to do the whole process in one place 
+
+ECDSA
+Deploy Erc20ForEcdsa.sol
+Then deployEcdsa.js which will send deploy Erc20 Ecdsa tokens and hold some tokens
+provide reciever and amount to deployEcdsa.js and it will return a signature 
+The reciever can use the signature to claim the tokens from Erc20 ECDSA contract by triggering claim token
+
