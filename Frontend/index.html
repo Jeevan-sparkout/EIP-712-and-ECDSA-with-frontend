@@ -1,0 +1,150 @@
+
+
+
+
+
+//  use [ npx http-server .] to run a local server and open index.html in a browser 
+                for eg"  http://192.168.1.166:8080"
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Permit Signer + Caller</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+</head>
+<body>
+  <h2>Permit + Call Demo</h2>
+
+  <label>Token Address: </label>
+  <input type="text" id="token" placeholder="0x..."><br><br>
+
+  <label>Spender Address: </label>
+  <input type="text" id="spender" placeholder="0x..."><br><br>
+
+  <label>Amount: </label>
+  <input type="number" id="amount" placeholder="1000"><br><br>
+
+  <button id="connect">Connect Wallet</button>
+  <button id="sign">Sign Permit</button>
+  <button id="permit">Call Permit</button>
+
+  <pre id="output"></pre>
+
+  <script>
+    let provider, signer, userAddress, domain, types, values, signature, deadline;
+
+    // Minimal ABI for permit
+    const erc20PermitAbi = [
+      "function nonces(address owner) view returns (uint256)",
+      "function name() view returns (string)",
+      "function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)"
+    ];
+
+    document.getElementById("connect").onclick = async () => {
+      if (!window.ethereum) {
+        alert("MetaMask not installed!");
+        return;
+      }
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+      userAddress = await signer.getAddress();
+
+      document.getElementById("output").innerText = "Connected: " + userAddress;
+    };
+
+    document.getElementById("sign").onclick = async () => {
+      try {
+        const tokenAddress = document.getElementById("token").value;
+        const spender = document.getElementById("spender").value;
+        const value = document.getElementById("amount").value;
+
+        const token = new ethers.Contract(tokenAddress, erc20PermitAbi, provider);
+
+        // Fetch tokenName + nonce dynamically
+        const tokenName = await token.name();
+        const nonce = await token.nonces(userAddress);
+
+        // Get chainId
+        const network = await provider.getNetwork();
+        const chainId = Number(network.chainId);
+
+        deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+
+        // EIP-712 domain
+        domain = {
+          name: tokenName,
+          version: "1",
+          chainId: chainId,
+          verifyingContract: tokenAddress,
+        };
+
+        types = {
+          Permit: [
+            { name: "owner", type: "address" },
+            { name: "spender", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+          ],
+        };
+
+        values = {
+          owner: userAddress,
+          spender: spender,
+          value: ethers.parseUnits(value, 18),
+          nonce: nonce,
+          deadline: deadline,
+        };
+
+        // Sign permit
+        signature = await signer.signTypedData(domain, types, values);
+
+        document.getElementById("output").innerText =
+          "Signature:\n" + signature;
+      } catch (err) {
+        document.getElementById("output").innerText =
+          "Error signing: " + err.message;
+      }
+    };
+
+    document.getElementById("permit").onclick = async () => {
+      try {
+        if (!signature) {
+          alert("Please sign first!");
+          return;
+        }
+
+        const tokenAddress = document.getElementById("token").value;
+        const token = new ethers.Contract(tokenAddress, erc20PermitAbi, signer);
+
+        // Split signature
+        const sig = ethers.Signature.from(signature);
+
+        // Call permit on-chain
+        const tx = await token.permit(
+          values.owner,
+          values.spender,
+          values.value,
+          values.deadline,
+          sig.v,
+          sig.r,
+          sig.s
+        );
+
+        document.getElementById("output").innerText =
+          "Permit tx sent: " + tx.hash;
+
+        const receipt = await tx.wait();
+        document.getElementById("output").innerText +=
+          "\nConfirmed in block: " + receipt.blockNumber;
+      } catch (err) {
+        document.getElementById("output").innerText =
+          "Error calling permit: " + err.message;
+      }
+    };
+  </script>
+</body>
+</html>
